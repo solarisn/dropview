@@ -59,57 +59,75 @@ public class RemoteAssetLoader : MonoBehaviour {
 
 	string materialString = null;
 	string objectString = null;
-	Texture2D[] textureArray = new Texture2D[3];
+	Texture2D[] textureArray = null;
 	int textureIndex = 0;
 
 	IEnumerator RemoteSocketLoad () {
 		WebSocket w = new WebSocket(new Uri("ws://localhost:8001"));
 		yield return StartCoroutine(w.Connect());
-		int i=0;
+		int i = 0;
 		while (true)
 		{
 			byte[] reply = w.Recv();
 			if (reply != null) {
 				string replyString = System.Text.Encoding.UTF8.GetString(reply, 0, reply.Length);
-				switch (replyString) {
-				case "incomingObj":
-					listeningForObj = true;
-					break;
-				case "incomingMtl":
-					listeningForMtl = true;
-					break;
-				case "incomingTexture":
-					listeningForTexture = true;
-					break;
-				case "END_OBJECT":
-					readingInObject = false;
-					Debug.Log ("FULL OBJECT RECEIVED");
-					Array.Reverse (textureArray);
-					GameObject temp = ObjImporter.Import (objectString, materialString, textureArray);
-					break;
-				case "START_OBJECT":
+				if (replyString.Contains("START_OBJECT")) {
+					Debug.Log ("Starting reading in object");
 					readingInObject = true;
-					break;
-				default:
-					if (listeningForObj) {
-						Debug.Log ("Mesh incoming...");
-						Debug.Log ("Received: " + replyString);
-						objectString = replyString;
-						listeningForObj = false;
-					} else if (listeningForMtl) {
-						Debug.Log ("Material incoming...");
-						Debug.Log ("Received: " + replyString);
-						materialString = replyString;
-						listeningForMtl = false;
-					} else if (listeningForTexture) {
-						Debug.Log ("Texture incoming...");
-						Texture2D tempTexture = new Texture2D (1, 1);
-						tempTexture.LoadImage (reply);
-						textureArray [i] = tempTexture;
-						i++;
-						listeningForTexture = false;
+					int arrLength = Int32.Parse(replyString.Split (' ') [1]);
+					textureArray = new Texture2D[arrLength];
+				} else {
+					switch (replyString) {
+					case "incomingObj":
+						listeningForObj = true;
+						break;
+					case "incomingMtl":
+						listeningForMtl = true;
+						break;
+					case "incomingTexture":
+						listeningForTexture = true;
+						break;
+					case "END_OBJECT":
+						readingInObject = false;
+						Debug.Log ("FULL OBJECT RECEIVED");
+						yield return new WaitForSeconds (0.1f);
+						Array.Reverse (textureArray);
+						if (textureArray.Length > 0 && materialString != null) {
+							GameObject temp = ObjImporter.Import (objectString, materialString, textureArray);
+						} else if (textureArray.Length == 0 || materialString == null) {
+							GameObject temp = ObjImporter.Import (objectString);
+						}
+						//GameObject temp = ObjImporter.Import (objectString, materialString, textureArray);
+						materialString = null;
+						objectString = null;
+						textureIndex = 0;
+						break;
+					case "START_OBJECT":
+						readingInObject = true;
+						break;
+					default:
+						if (listeningForObj) {
+							Debug.Log ("Mesh incoming...");
+							Debug.Log ("Received: " + replyString);
+							objectString = replyString;
+							listeningForObj = false;
+						} else if (listeningForMtl) {
+							Debug.Log ("Material incoming...");
+							Debug.Log ("Received: " + replyString);
+							materialString = replyString;
+							listeningForMtl = false;
+						} else if (listeningForTexture) {
+							Debug.Log ("Texture incoming...");
+							Texture2D tempTexture = new Texture2D (1, 1);
+							tempTexture.LoadImage (reply);
+							textureArray[textureIndex] = tempTexture;
+							//textureArray [i] = tempTexture; //OLD ARRAY IMPLEMENTATION
+							//i++;
+							textureIndex++;
+							listeningForTexture = false;
+						}
+						break;
 					}
-					break;
 				}
 				/*
 				if (replyString.Contains ("newmtl")) {
@@ -145,7 +163,7 @@ public class RemoteAssetLoader : MonoBehaviour {
 				Debug.LogError ("Error: "+w.error);
 				break;
 			}
-			yield return 0;
+			yield return null;
 		}
 		w.Close();
 	}

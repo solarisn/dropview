@@ -4,12 +4,15 @@ module.exports = {
 	sendFileToUnity: function (uploadedFiles, cb) {
 
 		if (uploadedFiles.length < 2) {
-			console.log("Sending .obj without material")
+			console.log("Sending .obj without material");
+			sails.config.conn.sendText("START_OBJECT 0");
+			sails.config.conn.sendText("incomingObj");
 			var file = fs.readFileSync(uploadedFiles[0].fd, null);
 			sails.config.conn.sendBinary(file);
+			sails.config.conn.sendText("END_OBJECT");
 		} else {
 			console.log("Sending .obj with .mtl");
-			sails.config.conn.sendText("START_OBJECT");
+			sails.config.conn.sendText("START_OBJECT " + (uploadedFiles.length - 2));
 			for (var i = 0; i < uploadedFiles.length; i++) {
 				var file;
 				if (uploadedFiles[i].fd.includes(".obj")) {
